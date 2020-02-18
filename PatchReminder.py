@@ -7,6 +7,11 @@ import calendar
 import sched
 import time
 
+class Patch_reminder:
+    def __init__(self, patch_date, date_format):
+        self.patch_date = patch_date
+        self.date_format = date_format
+
 # day and month names
 month_name = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -30,13 +35,13 @@ def replace_text(text, section):
                     temp_text = temp_text.replace(each_key, today.strftime(each_val))
     return temp_text
 
-def replace_values_text(text, section, values):
+def replace_values_text(text, section, patch_reminders):
     temp_text = text
     for each_section in config.sections():
         if each_section == section:
-            for (each_key, each_val), value in zip(config.items(each_section), values):
-                if each_key.startswith('%'):
-                    temp_text = temp_text.replace(each_key, value.strftime("%d/%m/%Y"))
+            for (each_key, each_val), patch_reminder in zip(config.items(each_section), patch_reminders):
+                if each_key.startswith('&'):
+                    temp_text = temp_text.replace(each_key, patch_reminder.patch_date.strftime(patch_reminder.date_format))
     return temp_text
 
 # sends the email
@@ -58,7 +63,7 @@ def getCommaValues(section):
     for each_section in config.sections():
         if each_section == section:
             for (each_key, each_val) in config.items(each_section):
-                if each_key.startswith('%'):
+                if each_key.startswith('&'):
                     values.append(each_val.split(","))
     return values
 
@@ -76,11 +81,11 @@ def getPatchDates():
                 if findDayName(date).lower() == day_to_email:
                     certain_days_in_month.append(day)
 
-        patch_dates_temp.append(datetime(today.year, month_to_email, certain_days_in_month[int(reminder[1]) - 1]))
+        patch_dates_temp.append(Patch_reminder(datetime(today.year, month_to_email, certain_days_in_month[int(reminder[1]) - 1]), reminder[3]))
     return patch_dates_temp
 
 # get patch dates
-patch_dates = getPatchDates()
+patch_reminders = getPatchDates()
 
 # settings
 use_message_template_file = config.getboolean('settings', 'use_message_template_file')
@@ -109,15 +114,18 @@ subject = config.get('message_details', 'subject')
 if not use_message_template_file:
     subject = config.get('message_details', 'subject')
     subject = replace_text(subject, 'message_details')
+    subject = replace_values_text(subject, 'reminders', patch_reminders)
     message_text = config.get('message_details', 'message_text')
     message_text = replace_text(message_text, 'message_details')
+    message_text = replace_values_text(message_text, 'reminders', patch_reminders)
 else:
     subject = config.get('message_template_file', 'subject')
     subject = replace_text(subject, 'message_template_file')
+    subject = replace_values_text(subject, 'reminders', patch_reminders)
     file_path = config.get('message_template_file', 'file_path')
     file_data = codecs.open(file_path, 'r')
     message_text = replace_text(file_data.read(), 'message_template_file')
-    message_text = replace_values_text(message_text, 'reminders', patch_dates)
+    message_text = replace_values_text(message_text, 'reminders', patch_reminders)
     file_data.close()
 
 message = f"""\
@@ -129,9 +137,6 @@ From: {sender}
 
 {message_text}"""
 
-
-for patch_date in patch_dates:
-    if patch_date.date() == today.date():
+for patch_reminder in patch_reminders:
+    if patch_reminder.patch_date.date() == today.date():
         sendEmail()
-
-
